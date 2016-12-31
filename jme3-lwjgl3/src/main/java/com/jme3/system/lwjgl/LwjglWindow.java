@@ -32,6 +32,48 @@
 
 package com.jme3.system.lwjgl;
 
+import static org.lwjgl.glfw.GLFW.GLFW_ALPHA_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_BLUE_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MAJOR;
+import static org.lwjgl.glfw.GLFW.GLFW_CONTEXT_VERSION_MINOR;
+import static org.lwjgl.glfw.GLFW.GLFW_DEPTH_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_FALSE;
+import static org.lwjgl.glfw.GLFW.GLFW_GREEN_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_CORE_PROFILE;
+import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_DEBUG_CONTEXT;
+import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_FORWARD_COMPAT;
+import static org.lwjgl.glfw.GLFW.GLFW_OPENGL_PROFILE;
+import static org.lwjgl.glfw.GLFW.GLFW_RED_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_REFRESH_RATE;
+import static org.lwjgl.glfw.GLFW.GLFW_RESIZABLE;
+import static org.lwjgl.glfw.GLFW.GLFW_SAMPLES;
+import static org.lwjgl.glfw.GLFW.GLFW_SRGB_CAPABLE;
+import static org.lwjgl.glfw.GLFW.GLFW_STENCIL_BITS;
+import static org.lwjgl.glfw.GLFW.GLFW_STEREO;
+import static org.lwjgl.glfw.GLFW.GLFW_TRUE;
+import static org.lwjgl.glfw.GLFW.GLFW_VISIBLE;
+import static org.lwjgl.glfw.GLFW.glfwCreateWindow;
+import static org.lwjgl.glfw.GLFW.glfwDefaultWindowHints;
+import static org.lwjgl.glfw.GLFW.glfwDestroyWindow;
+import static org.lwjgl.glfw.GLFW.glfwGetPrimaryMonitor;
+import static org.lwjgl.glfw.GLFW.glfwGetVideoMode;
+import static org.lwjgl.glfw.GLFW.glfwInit;
+import static org.lwjgl.glfw.GLFW.glfwMakeContextCurrent;
+import static org.lwjgl.glfw.GLFW.glfwPollEvents;
+import static org.lwjgl.glfw.GLFW.glfwSetErrorCallback;
+import static org.lwjgl.glfw.GLFW.glfwSetWindowFocusCallback;
+import static org.lwjgl.glfw.GLFW.glfwSetWindowIcon;
+import static org.lwjgl.glfw.GLFW.glfwSetWindowPos;
+import static org.lwjgl.glfw.GLFW.glfwSetWindowSizeCallback;
+import static org.lwjgl.glfw.GLFW.glfwSetWindowTitle;
+import static org.lwjgl.glfw.GLFW.glfwShowWindow;
+import static org.lwjgl.glfw.GLFW.glfwSwapBuffers;
+import static org.lwjgl.glfw.GLFW.glfwSwapInterval;
+import static org.lwjgl.glfw.GLFW.glfwWindowHint;
+import static org.lwjgl.glfw.GLFW.glfwWindowShouldClose;
+import static org.lwjgl.opengl.GL11.GL_FALSE;
+import static org.lwjgl.system.MemoryUtil.NULL;
+
 import com.jme3.input.JoyInput;
 import com.jme3.input.KeyInput;
 import com.jme3.input.MouseInput;
@@ -43,20 +85,21 @@ import com.jme3.system.AppSettings;
 import com.jme3.system.JmeContext;
 import com.jme3.system.JmeSystem;
 import com.jme3.system.NanoTimer;
-import org.lwjgl.glfw.*;
+import com.jme3.util.BufferUtils;
 
-import java.awt.*;
+import org.lwjgl.Version;
+import org.lwjgl.glfw.GLFWErrorCallback;
+import org.lwjgl.glfw.GLFWImage;
+import org.lwjgl.glfw.GLFWVidMode;
+import org.lwjgl.glfw.GLFWWindowFocusCallback;
+import org.lwjgl.glfw.GLFWWindowSizeCallback;
+
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.lwjgl.Version;
-
-import static org.lwjgl.glfw.GLFW.*;
-import static org.lwjgl.opengl.GL11.GL_FALSE;
-import static org.lwjgl.opengl.GL11.GL_TRUE;
-import static org.lwjgl.system.MemoryUtil.NULL;
 
 /**
  * A wrapper class over the GLFW framework in LWJGL 3.
@@ -67,21 +110,24 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
 
     private static final Logger LOGGER = Logger.getLogger(LwjglWindow.class.getName());
 
-    protected AtomicBoolean needClose = new AtomicBoolean(false);
+    protected final AtomicBoolean needClose = new AtomicBoolean(false);
     protected final AtomicBoolean needRestart = new AtomicBoolean(false);
-    protected boolean wasActive = false;
-    protected boolean autoFlush = true;
-    protected boolean allowSwapBuffers = false;
-    private long window = NULL;
+
     private final JmeContext.Type type;
-    private int frameRateLimit = -1;
-    private double frameSleepTime;
 
     private GLFWErrorCallback errorCallback;
     private GLFWWindowSizeCallback windowSizeCallback;
     private GLFWWindowFocusCallback windowFocusCallback;
 
     private Thread mainThread;
+
+    private double frameSleepTime;
+    private long window = NULL;
+    private int frameRateLimit = -1;
+
+    protected boolean wasActive = false;
+    protected boolean autoFlush = true;
+    protected boolean allowSwapBuffers = false;
 
     public LwjglWindow(final JmeContext.Type type) {
         if (!JmeContext.Type.Display.equals(type) && !JmeContext.Type.OffscreenSurface.equals(type) && !JmeContext.Type.Canvas.equals(type)) {
@@ -132,9 +178,19 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
                 final String message = GLFWErrorCallback.getDescription(description);
                 listener.handleError(message, new Exception(message));
             }
+
+            @Override
+            public void close(){
+                super.close();
+            }
+
+            @Override
+            public void callback(long args) {
+                super.callback(args);
+            }
         });
 
-        if (glfwInit() != GLFW_TRUE) {
+        if (!glfwInit()) {
             throw new IllegalStateException("Unable to initialize GLFW");
         }
 
@@ -160,8 +216,6 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
 
         glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, settings.isResizable() ? GLFW_TRUE : GLFW_FALSE);
-
-        glfwWindowHint(GLFW_DOUBLE_BUFFER, GLFW_TRUE);
         glfwWindowHint(GLFW_DEPTH_BITS, settings.getDepthBits());
         glfwWindowHint(GLFW_STENCIL_BITS, settings.getStencilBits());
         glfwWindowHint(GLFW_SAMPLES, settings.getSamples());
@@ -206,12 +260,21 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
                 settings.setResolution(width, height);
                 listener.reshape(width, height);
             }
+
+            @Override
+            public void close() {
+                super.close();
+            }
+
+            @Override
+            public void callback(long args) {
+                super.callback(args);
+            }
         });
 
         glfwSetWindowFocusCallback(window, windowFocusCallback = new GLFWWindowFocusCallback() {
             @Override
-            public void invoke(final long window, final int focused) {
-                final boolean focus = (focused == GL_TRUE);
+            public void invoke(final long window, final boolean focus) {
                 if (wasActive != focus) {
                     if (!wasActive) {
                         listener.gainFocus();
@@ -222,6 +285,16 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
 
                     wasActive = !wasActive;
                 }
+            }
+
+            @Override
+            public void close() {
+                super.close();
+            }
+
+            @Override
+            public void callback(long args) {
+                super.callback(args);
             }
         });
 
@@ -242,12 +315,89 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
             glfwSwapInterval(0);
         }
 
-
-        glfwShowWindow(window);
+        setWindowIcon(settings);
+        showWindow();
 
         allowSwapBuffers = settings.isSwapBuffers();
+    }
 
-        // TODO: When GLFW 3.2 is released and included in LWJGL 3.x then we should hopefully be able to set the window icon.
+    protected void showWindow() {
+        glfwShowWindow(window);
+    }
+
+    /**
+     * Set custom icons to the window of this application.
+     */
+    protected void setWindowIcon(final AppSettings settings) {
+
+        final Object[] icons = settings.getIcons();
+        if (icons == null) return;
+
+        final GLFWImage[] images = imagesToGLFWImages(icons);
+
+        try (final GLFWImage.Buffer iconSet = GLFWImage.malloc(images.length)) {
+
+            for (int i = images.length - 1; i >= 0; i--) {
+                final GLFWImage image = images[i];
+                iconSet.put(i, image);
+            }
+
+            glfwSetWindowIcon(window, iconSet);
+        }
+    }
+
+    /**
+     * Convert array of images to array of {@link GLFWImage}.
+     */
+    private GLFWImage[] imagesToGLFWImages(final Object[] images) {
+
+        final GLFWImage[] out = new GLFWImage[images.length];
+
+        for (int i = 0; i < images.length; i++) {
+            final BufferedImage image = (BufferedImage) images[i];
+            out[i] = imageToGLFWImage(image);
+        }
+
+        return out;
+    }
+
+    /**
+     * Convert the {@link BufferedImage} to the {@link GLFWImage}.
+     */
+    private GLFWImage imageToGLFWImage(BufferedImage image) {
+
+        if (image.getType() != BufferedImage.TYPE_INT_ARGB_PRE) {
+
+            final BufferedImage convertedImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB_PRE);
+            final Graphics2D graphics = convertedImage.createGraphics();
+
+            final int targetWidth = image.getWidth();
+            final int targetHeight = image.getHeight();
+
+            graphics.drawImage(image, 0, 0, targetWidth, targetHeight, null);
+            graphics.dispose();
+
+            image = convertedImage;
+        }
+
+        final ByteBuffer buffer = BufferUtils.createByteBuffer(image.getWidth() * image.getHeight() * 4);
+
+        for (int i = 0; i < image.getHeight(); i++) {
+            for (int j = 0; j < image.getWidth(); j++) {
+                int colorSpace = image.getRGB(j, i);
+                buffer.put((byte) ((colorSpace << 8) >> 24));
+                buffer.put((byte) ((colorSpace << 16) >> 24));
+                buffer.put((byte) ((colorSpace << 24) >> 24));
+                buffer.put((byte) (colorSpace >> 24));
+            }
+        }
+
+        buffer.flip();
+
+        final GLFWImage result = GLFWImage.create();
+        result.set(image.getWidth(), image.getHeight(), buffer);
+
+        return result;
     }
 
     /**
@@ -260,17 +410,17 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
             }
 
             if (errorCallback != null) {
-                errorCallback.release();
+                errorCallback.close();
                 errorCallback = null;
             }
 
             if (windowSizeCallback != null) {
-                windowSizeCallback.release();
+                windowSizeCallback.close();
                 windowSizeCallback = null;
             }
 
             if (windowFocusCallback != null) {
-                windowFocusCallback.release();
+                windowFocusCallback.close();
                 windowFocusCallback = null;
             }
 
@@ -278,7 +428,7 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
                 glfwDestroyWindow(window);
                 window = NULL;
             }
-        } catch (Exception ex) {
+        } catch (final Exception ex) {
             listener.handleError("Failed to destroy context", ex);
         }
     }
@@ -326,13 +476,13 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
 
             created.set(true);
             super.internalCreate();
-            
+
             //create OpenCL
             //Must be done here because the window handle is needed
             if (settings.isOpenCLSupport()) {
                 initOpenCL(window);
             }
-            
+
         } catch (Exception ex) {
             try {
                 if (window != NULL) {
@@ -460,7 +610,7 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
                 break;
             }
 
-            if (glfwWindowShouldClose(window) == GL_TRUE) {
+            if (glfwWindowShouldClose(window)) {
                 listener.requestClose(false);
             }
         }
@@ -513,45 +663,5 @@ public abstract class LwjglWindow extends LwjglContext implements Runnable {
 
     public long getWindowHandle() {
         return window;
-    }
-
-
-    // TODO: Implement support for window icon when GLFW supports it.
-
-    private ByteBuffer[] imagesToByteBuffers(Object[] images) {
-        ByteBuffer[] out = new ByteBuffer[images.length];
-        for (int i = 0; i < images.length; i++) {
-            BufferedImage image = (BufferedImage) images[i];
-            out[i] = imageToByteBuffer(image);
-        }
-        return out;
-    }
-
-    private ByteBuffer imageToByteBuffer(BufferedImage image) {
-        if (image.getType() != BufferedImage.TYPE_INT_ARGB_PRE) {
-            BufferedImage convertedImage = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB_PRE);
-            Graphics2D g = convertedImage.createGraphics();
-            double width = image.getWidth() * (double) 1;
-            double height = image.getHeight() * (double) 1;
-            g.drawImage(image, (int) ((convertedImage.getWidth() - width) / 2),
-                    (int) ((convertedImage.getHeight() - height) / 2),
-                    (int) (width), (int) (height), null);
-            g.dispose();
-            image = convertedImage;
-        }
-
-        byte[] imageBuffer = new byte[image.getWidth() * image.getHeight() * 4];
-        int counter = 0;
-        for (int i = 0; i < image.getHeight(); i++) {
-            for (int j = 0; j < image.getWidth(); j++) {
-                int colorSpace = image.getRGB(j, i);
-                imageBuffer[counter + 0] = (byte) ((colorSpace << 8) >> 24);
-                imageBuffer[counter + 1] = (byte) ((colorSpace << 16) >> 24);
-                imageBuffer[counter + 2] = (byte) ((colorSpace << 24) >> 24);
-                imageBuffer[counter + 3] = (byte) (colorSpace >> 24);
-                counter += 4;
-            }
-        }
-        return ByteBuffer.wrap(imageBuffer);
     }
 }
